@@ -30,7 +30,10 @@ class Embedder:
                     raise ValueError('Install backend embedding dependencies, or use Keyword mode.') from None
                 except Exception:
                     raise ValueError('The embedding model could not be loaded. Check the model download, or use Keyword mode.') from None
-            return self.model.encode([query])[0]
+            self.model.tokenizer.no_truncation()
+            if len(self.model.tokenizer.encode(query, add_special_tokens=False).ids) > self.settings.embedding_max_tokens:
+                raise ValueError('The query exceeds the configured embedding token cap. Shorten it, use Keyword mode, or rebuild with a reviewed larger embedding cap.')
+            return self.model.encode([query], max_length=self.settings.embedding_max_tokens)[0]
 
 
 def create_app(settings: Settings | None = None):
@@ -135,8 +138,15 @@ def create_app(settings: Settings | None = None):
         for ranking in [lexical,semantic]:
             for rank,item in enumerate(ranking,1):
                 chunks[item.id]=item;scores[item.id]=scores.get(item.id,0)+1/(60+rank)
-        results=[chunks[id] for id in sorted(scores,key=lambda id:(-scores[id],id))[:80]]
-        trace.steps.append(TraceStep(name='Result merge',status='completed',detail='Reciprocal rank fusion, k=60; deduplicate chunk IDs; limit 80. No query expansion or synonym/typo correction ran.',duration_ms=round((perf_counter()-merge_started)*1000,2),result_count=len(results),result_ids=[item.id for item in results]))
+        # Protect each independent method's best candidates before filling by RRF.
+        protected=[];seen=set()
+        for rank in range(settings.retrieval_per_method):
+            for ranking in [lexical,semantic]:
+                if rank < len(ranking) and ranking[rank].id not in seen:
+                    protected.append(ranking[rank].id);seen.add(ranking[rank].id)
+        remainder=[id for id in sorted(scores,key=lambda id:(-scores[id],id)) if id not in seen]
+        results=[chunks[id] for id in (protected+remainder)[:80]]
+        trace.steps.append(TraceStep(name='Result merge',status='completed',detail=f'Protect top {settings.retrieval_per_method} per method, interleave/deduplicate; fill by reciprocal rank fusion k=60; limit 80. No query expansion or synonym/typo correction ran.',duration_ms=round((perf_counter()-merge_started)*1000,2),result_count=len(results),result_ids=[item.id for item in results]))
         note='Ranked matches; this is not an exhaustive list.'
         if any(item.coverage_note for item in results): note+=' Some retrieved sources have reported gaps.'
         return results,note,trace
@@ -153,10 +163,16 @@ def create_app(settings: Settings | None = None):
         if not evidence:
             trace.steps.append(TraceStep(name='Answer generation',status='skipped',detail='No matching evidence; no answer-model call.'))
             return ChatResponse(answer='I do not have enough evidence in this scope to answer.',citations=[],insufficient_evidence=True,coverage_note=note,trace=trace)
-        generation=TraceStep(name='Answer generation',status='completed',detail=f'{settings.llm_provider}: {settings.llm_model}; up to 8 retrieved passages, bounded to context; Pydantic JSON/citation validation; at most one repair retry.')
+        seeds=evidence[:settings.retrieval_per_method * (2 if body.mode == 'hybrid' else 1)]
+        started=perf_counter()
+        evidence=await asyncio.to_thread(store.expand_context,body,seeds,settings.context_neighbors)
+        trace.steps.append(TraceStep(name='Section context',status='completed',detail=f'All {len(seeds)} seeds first; add up to {settings.context_neighbors} preceding/following chunks from the same node, within explicit filters. Source order retained.',duration_ms=round((perf_counter()-started)*1000,2),result_count=len(evidence),result_ids=[c.id for c in evidence]))
+        packing=TraceStep(name='Evidence packing',status='completed',detail='Count selected model tokens; preserve complete passages.')
+        trace.steps.append(packing)
+        generation=TraceStep(name='Answer generation',status='completed',detail=f'{settings.llm_provider}: {settings.llm_model}; complete passages within token budget; Pydantic JSON/citation validation; at most one repair retry.')
         trace.steps.append(generation);started=perf_counter()
         try:
-            answer=await generate_answer(settings,body,evidence[:8],request.app.state.model_client)
+            answer=await generate_answer(settings,body,evidence,request.app.state.model_client,packing)
         except ModelOutputError:
             generation.status='failed'
             raise

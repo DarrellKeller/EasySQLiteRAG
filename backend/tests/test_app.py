@@ -165,3 +165,74 @@ def test_empty_trace_does_not_claim_search_or_inference_ran(app):
         trace=client.post('/api/chat',json={'query':'Anything'}).json()['trace']
         assert [step['status'] for step in trace['steps']]==['completed','skipped','skipped']
         assert trace['steps'][0]['result_count']==0
+
+
+def test_keyword_top_hit_survives_many_weak_dual_matches(app):
+    from local_rag.models import Chunk
+    def chunk(id): return Chunk(id=id,node_id='inside',title='Evidence',text='Actual text',path=[])
+    with TestClient(app) as client:
+        seed(app.state.store)
+        lexical=[chunk('keyword-best')]+[chunk(f'common-{i}') for i in range(30)]
+        semantic=[chunk(f'common-{i}') for i in range(30)]
+        app.state.store.lexical=lambda *a: lexical
+        def exact(*a,metrics=None,**kw):
+            metrics.update(scored_vectors=31,dimensions=2);return semantic
+        app.state.store.exact=exact
+        app.state.embedder.encode=lambda query: np.array([1,0],dtype=np.float32)
+        ids=[c['id'] for c in client.post('/api/search',json={'query':'keyword'}).json()['results']]
+        assert ids[0]=='keyword-best'
+        assert len(ids)==len(set(ids))
+        assert set(c.id for c in lexical[:8]+semantic[:8]).issubset(ids[:16])
+
+
+def test_context_uses_source_order_and_respects_group_and_section(app):
+    from local_rag.models import SearchRequest
+    with TestClient(app):
+        seed(app.state.store)
+        with app.state.store.connection() as db:
+            db.execute("UPDATE chunks SET source_order=20 WHERE id='z'")
+            for id,order,group,node in [('before',10,'g','inside'),('after',30,'g','inside'),('wrong-group',21,None,'inside'),('wrong-section',22,'g','outside')]:
+                db.execute("INSERT INTO chunks(id,node_id,group_id,title,text,path_json,input_hash,source_order) VALUES(?,?,?,?,?,?,?,?)",(id,node,group,'Section','Full exception','[]','hash',order))
+        request=SearchRequest(query='keyword',scope_node_id='inside',group_ids=['g'])
+        context=app.state.store.expand_context(request,[app.state.store.get_chunk('z')])
+        assert [c.id for c in context]==['z','before','after']
+        assert all(c.text for c in context)
+
+
+def test_chat_sends_both_pools_and_section_context(app,monkeypatch):
+    from local_rag.models import Chunk,ModelAnswer
+    captured=[]
+    with TestClient(app) as client:
+        seed(app.state.store)
+        with app.state.store.connection() as db:
+            db.execute("INSERT INTO chunks(id,node_id,title,text,path_json,input_hash,source_order) VALUES('neighbor','inside','Continuation','Complete exception','[]','hash',2)")
+            db.execute("UPDATE chunks SET source_order=1 WHERE id='z'")
+        lexical=[app.state.store.get_chunk('z')]
+        semantic=[app.state.store.get_chunk('neighbor')]
+        app.state.store.lexical=lambda *a:lexical
+        def exact(*a,metrics=None,**kw):metrics.update(scored_vectors=2,dimensions=2);return semantic
+        app.state.store.exact=exact;app.state.embedder.encode=lambda query:np.array([1,0],dtype=np.float32)
+        async def generate(settings,body,evidence,client,packing):
+            captured.extend(evidence);packing.result_ids=[c.id for c in evidence]
+            return ModelAnswer(answer='Complete exception [1].',citation_ids=['neighbor'],insufficient_evidence=False)
+        monkeypatch.setattr('local_rag.app.generate_answer',generate)
+        data=client.post('/api/chat',json={'query':'keyword','scope_node_id':'inside'}).json()
+        assert [c.id for c in captured]==['z','neighbor']
+        assert data['citations'][0]['id']=='neighbor'
+        assert next(t for t in data['trace']['steps'] if t['name']=='Section context')['result_ids']==['z','neighbor']
+
+
+def test_embedding_query_cap_is_explicit_and_never_silently_truncates():
+    from local_rag.app import Embedder
+    from types import SimpleNamespace
+    embedder=Embedder(Settings(embedding_max_tokens=4))
+    class Tokenizer:
+        def no_truncation(self):pass
+        def encode(self,text,**kwargs):return SimpleNamespace(ids=list(range(len(text))))
+    def encode(texts,**kwargs):
+        assert kwargs['max_length']==4
+        return np.array([[1,0]],dtype=np.float32)
+    embedder.model=SimpleNamespace(tokenizer=Tokenizer(),encode=encode)
+    assert list(embedder.encode('fits'))==[1,0]
+    with pytest.raises(ValueError,match='exceeds the configured embedding token cap'):
+        embedder.encode('too long')

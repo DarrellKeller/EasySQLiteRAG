@@ -29,3 +29,9 @@ On malformed JSON, wrong types, extra fields or invalid citations, allow one sma
 Use dedicated Pydantic schemas if adding keyword expansion or a search planner: bounded term lists and allowlisted filter fields/values, never free-form SQL. Preserve the original query. Advanced provider adapters must support equivalent structured-output validation; local Ollama behavior is not a promise that a remote service supports the same parameters.
 
 FastAPI request and `response_model` validation enforce the public API contract as well. Keep `ModelAnswer` distinct from the public chat response, which contains trusted `citations` rather than generated source objects. [FastAPI request models](https://fastapi.tiangolo.com/tutorial/body/), [Pydantic validation](https://docs.pydantic.dev/latest/concepts/models/).
+
+## Evidence and token limits
+
+Read [model-limits.md](model-limits.md). The backend uses the configured model tokenizer and chat template to pack complete evidence passages, with output and overhead reserves and a budgeted repair message. It includes schema/citation constraints in counting before sending. No `text[:N]`, byte/token equivalence or repeated halving. Oversized passages are skipped whole and their IDs appear in the optional trace. A skipped passage cannot be cited. If no complete evidence fits, return a clear setup/context error and retain Sources only.
+
+For other local/cloud providers, verify their tokenizer or documented counting endpoint, actual context and output limits and schema overhead. Adapt both counting and inference; changing `.env` alone is not a working provider integration. Never silently reuse Granite’s tokenizer for another model. Preserve the same complete-evidence and explicit-skipping behavior.

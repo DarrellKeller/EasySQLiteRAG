@@ -15,6 +15,12 @@ class Settings(BaseModel):
     llm_provider: str = "ollama"
     llm_model: str = "granite4.2:3b"
     llm_base_url: str = "http://localhost:11434"
+    llm_tokenizer_model: str = "ibm-granite/granite-4.2-3b"
+    llm_tokenizer_revision: str = "main"
+    context_reserve_tokens: int = Field(default=512, ge=128, le=8192)
+    embedding_max_tokens: int = Field(default=512, ge=1)
+    retrieval_per_method: int = Field(default=8, ge=1, le=32)
+    context_neighbors: int = Field(default=1, ge=0, le=3)
     context_tokens: int = Field(default=8192, ge=2048, le=131072)
     output_tokens: int = Field(default=768, ge=128, le=4096)
     theme_primary: str = Field(default="#163f3b", pattern=r"^#[0-9a-fA-F]{6}$")
@@ -35,6 +41,12 @@ class Settings(BaseModel):
             llm_provider=os.getenv("LLM_PROVIDER", "ollama"),
             llm_model=os.getenv("LLM_MODEL", "granite4.2:3b"),
             llm_base_url=os.getenv("LLM_BASE_URL", "http://localhost:11434"),
+            llm_tokenizer_model=os.getenv("LLM_TOKENIZER_MODEL", "ibm-granite/granite-4.2-3b" if os.getenv("LLM_MODEL", "granite4.2:3b") == "granite4.2:3b" else ""),
+            llm_tokenizer_revision=os.getenv("LLM_TOKENIZER_REVISION", "main"),
+            context_reserve_tokens=os.getenv("LLM_CONTEXT_RESERVE_TOKENS", "512"),
+            embedding_max_tokens=os.getenv("EMBEDDING_MAX_TOKENS", "512"),
+            retrieval_per_method=os.getenv("RETRIEVAL_PER_METHOD", "8"),
+            context_neighbors=os.getenv("CONTEXT_NEIGHBORS", "1"),
             context_tokens=os.getenv("LLM_CONTEXT_TOKENS", "8192"),
             output_tokens=os.getenv("LLM_MAX_OUTPUT_TOKENS", "768"),
             theme_primary=os.getenv("THEME_PRIMARY", "#163f3b"),

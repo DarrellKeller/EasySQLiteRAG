@@ -76,3 +76,53 @@ def test_abstention_without_markers_omits_unclaimed_citations():
     result=validate_answer(json.dumps({**GOOD,"answer":"There is not enough evidence.","insufficient_evidence":True}),EVIDENCE)
     assert result.citation_ids == []
     assert result.answer == "There is not enough evidence."
+
+
+class GroupingTokenizer:
+    """Deterministic token-unit stand-in; tests never download a model."""
+    def apply_chat_template(self, messages, **kwargs):
+        return list(range((sum(len(m['content']) for m in messages)+3)//4 + 16))
+
+
+@pytest.fixture(autouse=True)
+def local_token_counter(monkeypatch):
+    monkeypatch.setattr('local_rag.llm.load_tokenizer', lambda *args: GroupingTokenizer())
+
+
+def test_large_character_input_is_counted_in_tokens_and_not_cut():
+    from local_rag.llm import pack_evidence
+    from local_rag.models import TraceStep
+    text=('A complete paragraph containing the exception. '*390)+'FINAL EXCEPTION: no fee.'
+    chunk=EVIDENCE[0].model_copy(update={'text':text})
+    _,messages,included,skipped,count,budget=pack_evidence(Settings(),SearchRequest(query='What is the exception?'),[chunk],GroupingTokenizer())
+    sent=json.loads(messages[1]['content'])['evidence'][0]['text']
+    assert len(text.encode()) > budget
+    assert count <= budget and sent == text
+    assert included=={'test-id'} and not skipped
+
+
+def test_oversized_passage_is_skipped_whole_and_later_evidence_survives():
+    from local_rag.llm import pack_evidence
+    huge=EVIDENCE[0].model_copy(update={'id':'huge','text':'x'*40000})
+    schema,messages,included,skipped,count,budget=pack_evidence(Settings(),SearchRequest(query='What is the value?'),[huge,*EVIDENCE],GroupingTokenizer())
+    assert skipped==['huge'] and included=={'test-id'}
+    assert json.loads(messages[1]['content'])['evidence'][0]['text']==EVIDENCE[0].text
+    assert schema['properties']['citation_ids']['items']['enum']==['test-id']
+    assert count <= budget
+
+
+def test_repair_and_allowed_citation_ids_fit_the_same_budget():
+    from local_rag.llm import pack_evidence,REPAIR_PROMPT
+    tokenizer=GroupingTokenizer();settings=Settings()
+    schema,messages,_,_,_,budget=pack_evidence(settings,SearchRequest(query='What is the value?'),EVIDENCE,tokenizer)
+    assert 'test-id' in messages[0]['content']
+    repaired=messages+[{'role':'user','content':REPAIR_PROMPT}]
+    assert len(tokenizer.apply_chat_template(repaired)) <= budget
+
+
+def test_tokenizer_mapping_is_rejected_instead_of_counting_dictionary_keys():
+    from local_rag.llm import pack_evidence
+    class MappingTokenizer:
+        def apply_chat_template(self,*args,**kwargs):return {'input_ids':[1]*4000,'attention_mask':[1]*4000}
+    with pytest.raises(ModelOutputError,match='unexpected token sequence'):
+        pack_evidence(Settings(),SearchRequest(query='Question'),EVIDENCE,MappingTokenizer())

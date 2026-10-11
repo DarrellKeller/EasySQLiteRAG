@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS groups (id TEXT PRIMARY KEY, title TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS chunks (
  id TEXT PRIMARY KEY, node_id TEXT NOT NULL REFERENCES nodes(id), group_id TEXT REFERENCES groups(id),
  title TEXT NOT NULL, text TEXT NOT NULL, path_json TEXT NOT NULL,
- locator TEXT NOT NULL DEFAULT '', source_url TEXT, coverage_note TEXT, input_hash TEXT NOT NULL
+ locator TEXT NOT NULL DEFAULT '', source_url TEXT, coverage_note TEXT, input_hash TEXT NOT NULL, source_order INTEGER
 );
 CREATE INDEX IF NOT EXISTS chunks_node ON chunks(node_id);
 CREATE INDEX IF NOT EXISTS chunks_group ON chunks(group_id);
@@ -68,6 +68,9 @@ class Store:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connection() as db:
             db.executescript(SCHEMA)
+            if "source_order" not in {row[1] for row in db.execute("PRAGMA table_info(chunks)")}:
+                db.execute("ALTER TABLE chunks ADD COLUMN source_order INTEGER")
+            db.execute("CREATE INDEX IF NOT EXISTS chunks_section_order ON chunks(node_id, source_order)")
 
     def counts(self):
         with self.connection() as db:
@@ -101,6 +104,30 @@ class Store:
             if not row:
                 raise KeyError("Source passage not found.")
             return self.chunk(row)
+
+    def expand_context(self, request, seeds, neighbors=1):
+        """Keep every seed first; append nearest same-section evidence within scope.
+
+        Ingestion records source_order. Legacy databases use insertion order,
+        never lexicographic IDs or a neighboring page from a different section.
+        """
+        result=list(seeds);seen={chunk.id for chunk in seeds}
+        if not neighbors:
+            return result
+        with self.connection() as db:
+            where,params=self.scope(db, request.scope_node_id, request.group_ids)
+            for seed in seeds:
+                position=db.execute("SELECT coalesce(source_order,rowid) FROM chunks WHERE id=?",(seed.id,)).fetchone()
+                if not position:
+                    continue
+                for operator,direction in [("<","DESC"),(">","ASC")]:
+                    rows=db.execute("SELECT c.* FROM chunks c WHERE "+where+
+                        " AND c.node_id=? AND coalesce(c.source_order,c.rowid) "+operator+" ? ORDER BY coalesce(c.source_order,c.rowid) "+direction+" LIMIT ?",
+                        [*params,seed.node_id,position[0],neighbors]).fetchall()
+                    for row in rows:
+                        if row['id'] not in seen:
+                            seen.add(row['id']);result.append(self.chunk(row))
+        return result
 
     def nodes(self, parent, cursor, limit):
         with self.connection() as db:
