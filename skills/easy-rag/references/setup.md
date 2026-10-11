@@ -14,12 +14,12 @@ From the repo root, on macOS/Linux:
 
 ```sh
 python3 -m venv .venv
-.venv/bin/python -m pip install -e './backend[dev,embeddings]'
+.venv/bin/python -m pip install -e './backend[dev,embeddings,documents]'
 npm --prefix frontend ci
 npm --prefix frontend run build
 ```
 
-On Windows use `py -3 -m venv .venv` after confirming its selected Python version, then `.venv\Scripts\python.exe -m pip install -e "./backend[dev,embeddings]"`; npm commands are unchanged. Reuse an existing compatible `.venv`. Invoke its Python directly so activation and shell policy are unnecessary. If the user chose a different embedding adapter, install its actual dependencies rather than requiring Model2Vec.
+On Windows use `py -3 -m venv .venv` after confirming its selected Python version, then `.venv\Scripts\python.exe -m pip install -e "./backend[dev,embeddings,documents]"`; npm commands are unchanged. Reuse an existing compatible `.venv`. Invoke its Python directly so activation and shell policy are unnecessary. If the user chose a different embedding adapter, install its actual dependencies rather than requiring Model2Vec.
 
 Create `.env` from `.env.example` only if absent, then set confirmed choices. Preserve existing credentials and values. Keep model keys in this backend file, never `VITE_` variables or browser code. Keep it Git-ignored. Quote hex theme colors in `.env`, for example `THEME_PRIMARY="#163f3b"`. Defaults: `DATABASE_PATH=./data/rag.sqlite3`, `EMBEDDING_MODEL=minishlab/potion-base-2M`, `EMBEDDING_CONFIG_ID=potion-base-2M:cosine:v1`, `LLM_MODEL=granite4.2:3b`, `LLM_BASE_URL=http://localhost:11434`. Record the real embedding-input configuration and update its ID when it changes.
 
@@ -42,7 +42,7 @@ Official references: [Ollama local quickstart](https://docs.ollama.com/quickstar
 
 For the confirmed default, load `model2vec.StaticModel.from_pretrained("minishlab/potion-base-2M")` in the project Python environment. The first load downloads the model; verify it works before bulk ingestion. Use the same model, input preparation, dimensions and configuration for documents and queries. Batch encode actual chunks. Store float32 vectors and input/config hashes. Changing embedding models requires re-embedding and rebuilding the map; changing only the answer model does not.
 
-The starter is empty and has no general ingestion command. Implement a reusable dataset-appropriate ingestion command following the skill's extraction, hierarchy, chunking and issue rules, then run it on the selected files. It should be repeatable without duplicate records. Tell the user about gaps throughout processing. Compute persisted real map projections; do not add demonstration records to make the screen appear populated. Finish with real retrieval and a cited answer, or clearly report what is still unavailable.
+The starter is empty and includes a reusable MarkItDown extraction command. Read [extraction.md](extraction.md), run `.venv/bin/python -m local_rag.extract documents --recursive` (or the confirmed source path), review its manifest and resolve/record extraction issues. This produces Markdown, not database records or embeddings. Implement a reusable dataset-appropriate ingestion command following the skill's extraction, hierarchy, chunking and issue rules, then run it on the selected files. It should be repeatable without duplicate records. Tell the user about gaps throughout processing. Compute persisted real map projections; do not add demonstration records to make the screen appear populated. Finish with real retrieval and a cited answer, or clearly report what is still unavailable.
 
 ## Run, verify and open
 

@@ -74,7 +74,7 @@ Verify real ingestion, FTS5, embeddings, map projection and generation separatel
 
 ## Starter backend and ingestion
 
-The standalone repo includes a FastAPI/Pydantic backend with empty SQLite tables, synchronized FTS5, filtered exact vector retrieval, ranked fusion, stored-coordinate map pagination and a schema-validated local Ollama adapter. It never imports or invents data on startup. The coding agent still designs the dataset-specific extractor, chunk boundaries, embedding inputs, hierarchy, map projection and quality checks. Optional query expansion, follow-up planning and exhaustive record enumeration must be implemented and validated for the recipient's workflow; the starter explicitly labels its bounded retrieval as ranked matches. A static build or an empty API proves setup, not answer quality.
+The standalone repo includes a FastAPI/Pydantic backend with empty SQLite tables, synchronized FTS5, filtered exact vector retrieval, ranked fusion, stored-coordinate map pagination and a schema-validated local Ollama adapter. It never imports or invents data on startup. A [MarkItDown extraction command](extraction.md) supplies local document-to-Markdown conversion and a source/hash/issue manifest. The coding agent reviews extraction, adds format-specific parsers/anchors as needed, transfers unresolved issues to SQLite, and designs dataset-specific ingestion, chunk boundaries, embedding inputs, hierarchy and map projection. Optional query expansion, follow-up planning and exhaustive record enumeration must be implemented and validated for the recipient's workflow; the starter explicitly labels its bounded retrieval as ranked matches. A static build or an empty API proves setup, not answer quality.
 
 ## Optional search traces
 

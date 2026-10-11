@@ -11,6 +11,8 @@ A reusable frontend is in [frontend](../../frontend/index.html). Read [reference
 
 ## 1. Discover, then ask
 
+If the user starts with only the GitHub link, obtain the complete [starter repo](https://github.com/DarrellKeller/EasySQLiteRAG) yourself before setup. Reuse a suitable existing checkout without resetting local changes; otherwise clone into a new local project folder, or download and extract the source archive if Git is unavailable. Do not expect the user to download the repo, know Git, install the skill globally or run setup commands. Resolve supporting references from the downloaded skill folder. If reading this skill remotely, fetch the full repo, not just this file; its frontend and backend are required. Keep the user's originals where they are and confirm any ambiguous project location.
+
 Inspect the current folder, project instructions, existing app and likely input files first. Exclude dependencies, build outputs, credentials and database internals. This starter's code, README, skill files, lockfiles and tests are not the user's dataset unless explicitly selected. Preserve unrelated edits and source originals.
 
 Ask only what is unanswered:
@@ -24,6 +26,8 @@ Ask only what is unanswered:
 Continue independent discovery while optional preferences are pending. Wait for necessary data/provider decisions before depending on them. Do not treat intake as the last opportunity to ask about the data.
 
 ## 2. Inspect and extract; raise questions as gaps appear
+
+Use the supplied **MarkItDown extraction command** for the reusable file-to-Markdown stage. Read [extraction instructions](references/extraction.md), install the document extras and run it on the selected inputs. Inspect its source/hash/issue manifest before chunking, surface failed or empty conversions, and transfer unresolved issues into SQLite for the UI. Conversion success is not proof of complete extraction; retain format-aware checks and accurate original citations.
 
 Inventory every included file/record and its format, source locator, version/hash, expected extent and extraction status. Sample representative content before selecting parsers. Use format-appropriate extraction:
 
