@@ -20,6 +20,8 @@ Instructions to the model:
 
 For local Ollama `/api/chat`, use `format: ModelAnswer.model_json_schema()`, `stream: false` and `options.temperature: 0`. Include the schema alongside the short prompt, and send the question and bounded actual evidence separately as data. Parse `message.content` using `ModelAnswer.model_validate_json()`. Do not merely ask for JSON, use a loose regex, strip arbitrary prose or trust the outer HTTP response as validation. [Ollama structured outputs](https://docs.ollama.com/capabilities/structured-outputs).
 
+For Granite, send `think: false` so the small output budget is available for the answer. Restrict the schema's citation-ID values to the actual evidence that fits the request, and distinguish those IDs from the displayed `[1]` markers. The supplied backend validates IDs first and can derive absent display markers from the validated list; existing incorrect markers remain errors. An abstention without reference markers drops unclaimed citations.
+
 Reject unknown or duplicate citation IDs and numbered references inconsistent with the citation list. The backend assembles citation titles, passage text and source URLs from retrieved records, never from generated fields. A supported answer needs valid citations; an insufficient-evidence response may have none. Validate content grounding separately: schema correctness alone does not establish truth.
 
 On malformed JSON, wrong types, extra fields or invalid citations, allow one small repair request and validate again. If it still fails, return a clear error and preserve source/keyword browsing. Connection failures and missing models get direct setup errors rather than an endless retry loop. Do not log private evidence or credentials in validation errors.

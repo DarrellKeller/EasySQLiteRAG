@@ -64,3 +64,15 @@ def test_context_overflow_fails_before_model_request():
             return await generate_answer(Settings(context_tokens=2048),SearchRequest(query='x'*4000),EVIDENCE,client)
     with pytest.raises(ModelOutputError): asyncio.run(run())
     assert not calls
+
+
+def test_missing_display_markers_are_built_from_validated_ids():
+    result=validate_answer(json.dumps({**GOOD,"answer":"The recorded value is seven."}),EVIDENCE)
+    assert result.answer == "The recorded value is seven. [1]"
+    assert result.citation_ids == ["test-id"]
+
+
+def test_abstention_without_markers_omits_unclaimed_citations():
+    result=validate_answer(json.dumps({**GOOD,"answer":"There is not enough evidence.","insufficient_evidence":True}),EVIDENCE)
+    assert result.citation_ids == []
+    assert result.answer == "There is not enough evidence."
