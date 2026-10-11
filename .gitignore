@@ -1,0 +1,21 @@
+# User configuration, documents and generated data never ship in this starter.
+.env
+.env.*
+!.env.example
+documents/
+data/
+*.sqlite
+*.sqlite3
+*.db
+*.db-*
+*.sqlite3-*
+# Dependencies/builds and local tooling.
+.venv/
+node_modules/
+dist/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.playwright-cli/
+.DS_Store

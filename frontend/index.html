@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Local RAG</title>
+    <script type="module" src="/src/main.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="header">
+      <h1>Local RAG</h1>
+      <nav aria-label="Main navigation">
+        <a id="nav-chat" href="#chat" aria-current="page">Chat</a>
+        <a id="nav-map" href="#map">Map</a>
+      </nav>
+      <div class="header-actions">
+        <button id="scope-button" aria-haspopup="dialog" disabled>
+          All sources
+        </button>
+        <button id="clear-scope" aria-label="Clear filters" hidden>
+          Clear
+        </button>
+        <button id="issues-button" aria-haspopup="dialog" hidden></button>
+      </div>
+    </header>
+    <main id="main" tabindex="-1">
+      <div id="connection" class="connection" role="status" hidden>
+        <span id="connection-text"></span><button id="retry">Retry</button>
+      </div>
+      <section id="chat-page" aria-label="Chat">
+        <div
+          id="messages"
+          class="messages"
+          aria-live="polite"
+          aria-relevant="additions"
+        ></div>
+        <div class="composer-wrap">
+          <p id="app-status" class="status" role="status"></p>
+          <form id="chat-form" class="composer">
+            <label class="sr-only" for="question">Question</label>
+            <textarea
+              id="question"
+              rows="2"
+              placeholder="Ask about your data…"
+              required
+              maxlength="4000"
+            ></textarea>
+            <div class="composer-actions">
+              <label class="sr-only" for="mode">Search method</label>
+              <select id="mode">
+                <option value="hybrid">Hybrid</option>
+                <option value="keyword">Keyword</option>
+                <option value="semantic">Semantic</option>
+              </select>
+              <button id="find-sources" type="button" disabled>
+                Find sources
+              </button>
+              <button id="stop" type="button" hidden>Stop</button>
+              <button id="send" class="primary" type="submit" disabled>
+                Send
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+      <section id="map-page" aria-label="Data map" hidden>
+        <canvas
+          id="map"
+          role="img"
+          aria-label="Data point map. Drag to pan and scroll or pinch to zoom. Use List for keyboard navigation."
+        ></canvas>
+        <div id="map-empty" class="map-empty" role="status"></div>
+        <div class="map-toolbar">
+          <form id="map-search-form" class="map-search">
+            <label class="sr-only" for="map-search">Search data map</label
+            ><input
+              id="map-search"
+              type="search"
+              placeholder="Search data…"
+              maxlength="4000"
+            /><button type="submit" aria-label="Search map">Search</button>
+          </form>
+          <button id="filters" aria-haspopup="dialog" disabled>Filters</button>
+          <button id="toggle-list" aria-pressed="false">List</button>
+        </div>
+        <div
+          id="point-list"
+          class="point-list"
+          aria-label="Mapped passages"
+          hidden
+        ></div>
+        <div class="zoom-controls" aria-label="Map controls">
+          <button id="zoom-in" aria-label="Zoom in">+</button
+          ><button id="zoom-out" aria-label="Zoom out">−</button
+          ><button id="fit">Fit</button>
+        </div>
+        <div class="map-bottom">
+          <span id="map-count" role="status"></span
+          ><button id="more-points" hidden>Load more</button>
+        </div>
+        <div
+          id="map-tooltip"
+          class="map-tooltip"
+          aria-hidden="true"
+          hidden
+        ></div>
+      </section>
+    </main>
+    <dialog id="filters-dialog" aria-labelledby="filters-title">
+      <div class="dialog-header">
+        <h2 id="filters-title">Filters</h2>
+        <button data-close="filters-dialog" aria-label="Close filters">
+          ×
+        </button>
+      </div>
+      <button id="all-sources">All sources</button>
+      <div id="group-filters" class="group-filters" aria-label="Groups"></div>
+      <div id="hierarchy" class="hierarchy" aria-label="Source hierarchy"></div>
+    </dialog>
+    <dialog id="source-dialog" aria-labelledby="source-title">
+      <div class="dialog-header">
+        <h2 id="source-title">Source</h2>
+        <button data-close="source-dialog" aria-label="Close source">×</button>
+      </div>
+      <p id="source-path" class="source-path"></p>
+      <p id="source-description"></p>
+      <div id="source-text" class="source-text"></div>
+      <p id="source-warning" class="warning" hidden></p>
+      <div class="source-actions">
+        <button id="source-scope">Search this branch</button
+        ><a id="source-link" target="_blank" rel="noopener noreferrer" hidden
+          >Open source ↗</a
+        >
+      </div>
+    </dialog>
+    <dialog id="issues-dialog" aria-labelledby="issues-title">
+      <div class="dialog-header">
+        <h2 id="issues-title">Data issues</h2>
+        <button data-close="issues-dialog" aria-label="Close data issues">
+          ×
+        </button>
+      </div>
+      <div id="issues-list"></div>
+    </dialog>
+  </body>
+</html>

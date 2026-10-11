@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "easysqliterag"
+version = "0.1.0"
+description = "An empty local SQLite RAG starter with a Vite UI and a data-ingestion skill."
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.121,<1",
+  "pydantic>=2.12,<3",
+  "httpx>=0.28,<1",
+  "uvicorn>=0.38,<1",
+  "python-dotenv>=1,<2",
+  "numpy>=2.2,<3",
+]
+
+[project.optional-dependencies]
+embeddings = ["model2vec>=0.7,<1"]
+dev = ["pytest>=8,<10"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["local_rag*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
