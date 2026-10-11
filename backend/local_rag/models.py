@@ -1,5 +1,5 @@
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 
 class StrictModel(BaseModel):
@@ -19,6 +19,15 @@ class SearchRequest(StrictModel):
     history: list[HistoryTurn] = Field(default_factory=list, max_length=8)
 
 
+class SourceReference(StrictModel):
+    id: str
+    node_id: str
+    title: str
+    path: list[str]
+    locator: str = ""
+    source_url: str | None = None
+
+
 class Chunk(StrictModel):
     id: str
     node_id: str
@@ -28,6 +37,9 @@ class Chunk(StrictModel):
     locator: str = ""
     source_url: str | None = None
     coverage_note: str | None = None
+    source_refs: list[SourceReference] = Field(default_factory=list)
+    # Original complete subunits are backend-only fallbacks for oversized joins.
+    _parts: list['Chunk'] = PrivateAttr(default_factory=list)
 
 
 class Node(StrictModel):

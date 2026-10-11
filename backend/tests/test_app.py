@@ -167,9 +167,9 @@ def test_empty_trace_does_not_claim_search_or_inference_ran(app):
         assert trace['steps'][0]['result_count']==0
 
 
-def test_keyword_top_hit_survives_many_weak_dual_matches(app):
+def test_fused_consensus_hits_are_not_displaced_by_a_protected_prefix(app):
     from local_rag.models import Chunk
-    def chunk(id): return Chunk(id=id,node_id='inside',title='Evidence',text='Actual text',path=[])
+    def chunk(id): return Chunk(id=id,node_id='inside',title='Evidence',text=f'Actual text {id}',path=[])
     with TestClient(app) as client:
         seed(app.state.store)
         lexical=[chunk('keyword-best')]+[chunk(f'common-{i}') for i in range(30)]
@@ -180,9 +180,9 @@ def test_keyword_top_hit_survives_many_weak_dual_matches(app):
         app.state.store.exact=exact
         app.state.embedder.encode=lambda query: np.array([1,0],dtype=np.float32)
         ids=[c['id'] for c in client.post('/api/search',json={'query':'keyword'}).json()['results']]
-        assert ids[0]=='keyword-best'
+        assert ids[:5]==[f'common-{i}' for i in range(5)]
         assert len(ids)==len(set(ids))
-        assert set(c.id for c in lexical[:8]+semantic[:8]).issubset(ids[:16])
+        assert 'keyword-best' in ids
 
 
 def test_context_uses_source_order_and_respects_group_and_section(app):
@@ -217,9 +217,68 @@ def test_chat_sends_both_pools_and_section_context(app,monkeypatch):
             return ModelAnswer(answer='Complete exception [1].',citation_ids=['neighbor'],insufficient_evidence=False)
         monkeypatch.setattr('local_rag.app.generate_answer',generate)
         data=client.post('/api/chat',json={'query':'keyword','scope_node_id':'inside'}).json()
-        assert [c.id for c in captured]==['z','neighbor']
+        assert len(captured)==1
+        assert captured[0].text=='keyword evidence\n\nComplete exception'
+        assert [r.id for r in captured[0].source_refs]==['z','neighbor']
         assert data['citations'][0]['id']=='neighbor'
-        assert next(t for t in data['trace']['steps'] if t['name']=='Section context')['result_ids']==['z','neighbor']
+        assert set(next(t for t in data['trace']['steps'] if t['name']=='Section context')['result_ids'])=={'z','neighbor'}
+
+
+def test_search_removes_identical_text_before_limit_and_preserves_scoped_sources(app):
+    with TestClient(app) as client:
+        seed(app.state.store)
+        data=client.post('/api/search',json={'query':'keyword','mode':'keyword'}).json()
+        assert len(data['results'])==1
+        assert len(data['results'][0]['source_refs'])==80
+        assert 'repeats removed' in next(s['detail'] for s in data['trace']['steps'] if s['name']=='Result merge')
+        scoped=client.post('/api/search',json={'query':'keyword','mode':'keyword','scope_node_id':'inside'}).json()
+        assert [c['id'] for c in scoped['results']]==['z']
+        assert scoped['results'][0]['source_refs']==[]
+
+
+def test_assembled_context_never_crosses_an_excluded_group_gap(app):
+    from local_rag.models import SearchRequest
+    with TestClient(app):
+        seed(app.state.store)
+        with app.state.store.connection() as db:
+            db.execute("UPDATE chunks SET source_order=1 WHERE id='z'")
+            for id,order,group in [('excluded',2,None),('after',3,'g')]:
+                db.execute("INSERT INTO chunks(id,node_id,group_id,title,text,path_json,input_hash,source_order) VALUES(?,?,?,?,?,?,?,?)",(id,'inside',group,'Section',id,'[]','hash',order))
+        req=SearchRequest(query='keyword',scope_node_id='inside',group_ids=['g'])
+        expanded=app.state.store.expand_context(req,[app.state.store.get_chunk('z')])
+        context,_=app.state.store.assemble_context(expanded)
+        assert [c.id for c in context]==['z','after']
+
+
+def test_chat_retrieval_cap_limits_seeds_before_context_packing(app,monkeypatch):
+    from local_rag.models import Chunk,ModelAnswer
+    captured=[]
+    with TestClient(app) as client:
+        seed(app.state.store)
+        ranked=[Chunk(id=f'c{i}',node_id='inside',title='Evidence',text=f'Distinct fact {i}',path=[]) for i in range(10)]
+        app.state.store.lexical=lambda *a:ranked
+        async def generate(settings,body,evidence,client,packing):
+            captured.extend(evidence)
+            return ModelAnswer(answer='Fact zero [1].',citation_ids=['c0'],insufficient_evidence=False)
+        monkeypatch.setattr('local_rag.app.generate_answer',generate)
+        data=client.post('/api/chat',json={'query':'keyword','mode':'keyword'}).json()
+        assert [c.id for c in captured]==[f'c{i}' for i in range(5)]
+        context=next(s for s in data['trace']['steps'] if s['name']=='Section context')
+        assert context['result_count']==5 and 'retrieval cap 5' in context['detail']
+
+
+def test_grounded_table_relations_retain_anchors_if_indexed_evidence_is_removed(app):
+    import sqlite3
+    with TestClient(app):
+        seed(app.state.store)
+        with app.state.store.connection() as db:
+            db.execute("INSERT INTO node_relations VALUES('link','root','inside','references','Shared key documented in source','source table note','z')")
+            with pytest.raises(sqlite3.IntegrityError):
+                db.execute("INSERT INTO node_relations VALUES('invalid','root','unknown','references','Unsupported target','source table note',NULL)")
+            db.execute("DELETE FROM chunks WHERE id='z'")
+            relation=db.execute("SELECT * FROM node_relations WHERE id='link'").fetchone()
+            assert relation['source_locator']=='source table note' and relation['evidence_chunk_id'] is None
+            assert db.execute('PRAGMA foreign_key_check').fetchall()==[]
 
 
 def test_embedding_query_cap_is_explicit_and_never_silently_truncates():

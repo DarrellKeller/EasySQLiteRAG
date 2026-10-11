@@ -545,6 +545,10 @@ dialog::backdrop {
   color: var(--muted);
   line-height: 1.6;
 }
+#source-locations {
+  white-space: pre-line;
+}
+
 .source-text {
   white-space: pre-wrap;
   font-size: 15px;

@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from pathlib import Path
 import numpy as np
 from .models import Chunk, Node, SearchRequest
+from .context import assemble_passages
 
 SCHEMA = """
 PRAGMA foreign_keys=ON;
@@ -50,6 +51,16 @@ CREATE TABLE IF NOT EXISTS ingestion_issues (
  affected_count INTEGER NOT NULL DEFAULT 1, affected_unit TEXT NOT NULL DEFAULT 'records',
  severity TEXT NOT NULL DEFAULT 'warning', resolution TEXT
 );
+CREATE TABLE IF NOT EXISTS node_relations (
+ id TEXT PRIMARY KEY,
+ from_node_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+ to_node_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+ relation_type TEXT NOT NULL, description TEXT NOT NULL,
+ source_locator TEXT NOT NULL,
+ evidence_chunk_id TEXT REFERENCES chunks(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS node_relations_from ON node_relations(from_node_id);
+CREATE INDEX IF NOT EXISTS node_relations_to ON node_relations(to_node_id);
 """
 
 
@@ -128,6 +139,16 @@ class Store:
                         if row['id'] not in seen:
                             seen.add(row['id']);result.append(self.chunk(row))
         return result
+
+    def assemble_context(self, evidence):
+        node_ids=list(dict.fromkeys(chunk.node_id for chunk in evidence))
+        orders={node_id:[] for node_id in node_ids}
+        if node_ids:
+            with self.connection() as db:
+                rows=db.execute('SELECT id,node_id FROM chunks WHERE node_id IN ('+
+                    ','.join('?' for _ in node_ids)+') ORDER BY node_id,coalesce(source_order,rowid),rowid',node_ids)
+                for row in rows: orders[row['node_id']].append(row['id'])
+        return assemble_passages(evidence,orders)
 
     def nodes(self, parent, cursor, limit):
         with self.connection() as db:

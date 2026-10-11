@@ -395,6 +395,7 @@ function sourceLoading(title) {
   $("source-title").textContent = title || "Source";
   $("source-path").textContent = "";
   $("source-description").textContent = "";
+  $("source-locations").hidden = true;
   $("source-text").textContent = "Loading…";
   $("source-link").hidden = $("source-warning").hidden = true;
   $("source-scope").disabled = true;
@@ -410,6 +411,13 @@ function showSource(chunk, node = {}) {
     : chunk.locator || "";
   $("source-description").textContent =
     node.description || chunk.description || "";
+  const locations = [...new Set((chunk.source_refs || []).map((ref) =>
+    ref.node_id === chunk.node_id ? ref.locator :
+      `${(ref.path || [ref.title]).join(" › ")} — ${ref.locator}`,
+  ).filter(Boolean))];
+  if (!locations.length && chunk.locator) locations.push(chunk.locator);
+  $("source-locations").textContent = locations.join("\n");
+  $("source-locations").hidden = locations.length === 0;
   $("source-text").textContent =
     chunk.text || "No extracted text is available for this source.";
   $("source-warning").hidden = !chunk.coverage_note && !node.coverage_note;

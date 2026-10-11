@@ -35,7 +35,7 @@ Return `chunks`, representative retrievable evidence from the eligible subtree. 
 
 ### GET /api/chunks/{encoded_id}
 
-Return `id`, `node_id`, `title`, original evidence `text`, `path`, source `locator`, optional `source_url` and `coverage_note`. Search/chat citations use these same IDs and may include text to avoid a second fetch. The dialog displays text safely; source URLs permit only HTTP(S). For local documents, preserve file/page/row anchors and optionally implement a dedicated validated local-source route rather than exposing arbitrary file paths through a file server.
+Return `id`, `node_id`, `title`, original evidence `text`, `path`, source `locator`, optional `source_url` and `coverage_note`. Search results use these stored IDs and may carry `source_refs` for identical eligible occurrences. Chat may return a derived `context-…` citation ID with a complete assembled excerpt and `source_refs` containing original chunk IDs, node IDs, titles, paths, locators and URLs. The dialog uses the returned text directly and shows its source locations; do not fetch a derived ID from the original-chunk endpoint. Original chunks remain retrievable under their stored IDs. The dialog displays text safely; source URLs permit only HTTP(S). For local documents, preserve file/page/row anchors and optionally implement a dedicated validated local-source route rather than exposing arbitrary file paths through a file server.
 
 ### POST /api/search and POST /api/chat
 

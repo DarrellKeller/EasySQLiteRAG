@@ -14,8 +14,8 @@ Read before choosing chunk sizes or configuring a different model. Embedding lim
 | `LLM_CONTEXT_TOKENS` | `8192`, intentionally below Granite’s published 131,072-token architectural maximum |
 | `LLM_MAX_OUTPUT_TOKENS` | `768`, reserved for compact JSON answers with thinking disabled |
 | `LLM_CONTEXT_RESERVE_TOKENS` | `512`, additional token allowance for provider/template variation; repair is also counted explicitly |
-| `RETRIEVAL_PER_METHOD` | `8`, protect that many candidates from each independent search method |
-| `CONTEXT_NEIGHBORS` | `1`, at most one preceding/following chunk of the same section per seed, within explicit filters |
+| `RETRIEVAL_CAP` | `5` unique ranked seed passages for Granite 3B; ask for the user's preference; starting heuristic is total model billions of parameters + 2, rounded up |
+| `CONTEXT_NEIGHBORS` | `0`, merge selected neighbors without automatically fetching extra context; enable a bounded amount only for demonstrated continuations/dependencies |
 
 These are starting settings, not universal optimal sizes or minimum hardware guarantees. Verify exact installed models, tokenizers and provider behavior.
 
@@ -36,6 +36,8 @@ Verify usable context, output limit, tokenizer/chat template and schema overhead
 
 Count the complete prompt with the actual answer tokenizer/template: instructions, question, full evidence with ancestry/locators, schema and allowed citation IDs. Reserve the configured output allowance and template/provider overhead. Account for the one possible repair message before the first call. Build the final schema constraints before measuring.
 
-Pack whole passages in priority order, skipping entire passages that cannot fit and continuing to smaller later ones. Return the included and skipped IDs in the optional trace. Never silently prefix-cut, halve text or remove the end of a rule. A section too large for one passage needs appropriate complete subunits at ingestion. When all evidence is too large, report this directly rather than returning a fabricated answer.
+Deduplicate identical bodies (whitespace-normalized, case/numbers/punctuation preserved), retaining all eligible source occurrences. Merge only verified contiguous selected chunks from the same section in source order; remove exact suffix/prefix overlap and retain the full union of evidence. Original chunks remain available for previews. The starter returns assembled citations with `source_refs`; the trace reports joins, duplicates and overlap removed. A derived context ID refers to the assembled excerpt returned in the response, not a new stored document.
+
+Pack whole passages in priority order, skipping entire passages that cannot fit and continuing to smaller later ones. A merged run is prioritized by its strongest seed; if it cannot fit, try its complete original subunits in retrieval priority order. Return included and skipped IDs in the optional trace, including oversized derived runs that fall back. Never silently prefix-cut, halve text or remove the end of a rule. A section too large for one original passage needs appropriate complete subunits at ingestion. When all evidence is too large, report this directly rather than returning a fabricated answer.
 
 Compare actual provider `prompt_eval_count`/usage with the local counter on representative real calls; investigate differences beyond the reserve. Verify one long but fitting passage remains unchanged in the provider request, and a truly oversized passage is skipped without starving later evidence. Preserve original evidence for source previews; retrieval metadata or grounded navigation summaries are not replacements for the underlying text.

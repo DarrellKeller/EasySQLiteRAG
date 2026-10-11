@@ -12,6 +12,7 @@ from .models import (ChatResponse, Chunk, ChunkPage, IssuePage, MapPage, NodePag
                      PublicConfig, SearchRequest, SearchResponse, SearchTrace, TraceStep, Theme)
 from .settings import Settings
 from .store import Store
+from .context import unique_passages
 
 
 class Embedder:
@@ -138,15 +139,10 @@ def create_app(settings: Settings | None = None):
         for ranking in [lexical,semantic]:
             for rank,item in enumerate(ranking,1):
                 chunks[item.id]=item;scores[item.id]=scores.get(item.id,0)+1/(60+rank)
-        # Protect each independent method's best candidates before filling by RRF.
-        protected=[];seen=set()
-        for rank in range(settings.retrieval_per_method):
-            for ranking in [lexical,semantic]:
-                if rank < len(ranking) and ranking[rank].id not in seen:
-                    protected.append(ranking[rank].id);seen.add(ranking[rank].id)
-        remainder=[id for id in sorted(scores,key=lambda id:(-scores[id],id)) if id not in seen]
-        results=[chunks[id] for id in (protected+remainder)[:80]]
-        trace.steps.append(TraceStep(name='Result merge',status='completed',detail=f'Protect top {settings.retrieval_per_method} per method, interleave/deduplicate; fill by reciprocal rank fusion k=60; limit 80. No query expansion or synonym/typo correction ran.',duration_ms=round((perf_counter()-merge_started)*1000,2),result_count=len(results),result_ids=[item.id for item in results]))
+        ranked_ids=sorted(scores,key=lambda id:(-scores[id],id))
+        results,duplicates=unique_passages([chunks[id] for id in ranked_ids])
+        results=results[:80]
+        trace.steps.append(TraceStep(name='Result merge',status='completed',detail=f'Reciprocal rank fusion k=60 over independent keyword/vector pools; no protected prefix; deduplicate identical text before limit 80 ({duplicates} repeats removed; source locations retained). No query expansion or synonym/typo correction ran.',duration_ms=round((perf_counter()-merge_started)*1000,2),result_count=len(results),result_ids=[item.id for item in results]))
         note='Ranked matches; this is not an exhaustive list.'
         if any(item.coverage_note for item in results): note+=' Some retrieved sources have reported gaps.'
         return results,note,trace
@@ -163,10 +159,13 @@ def create_app(settings: Settings | None = None):
         if not evidence:
             trace.steps.append(TraceStep(name='Answer generation',status='skipped',detail='No matching evidence; no answer-model call.'))
             return ChatResponse(answer='I do not have enough evidence in this scope to answer.',citations=[],insufficient_evidence=True,coverage_note=note,trace=trace)
-        seeds=evidence[:settings.retrieval_per_method * (2 if body.mode == 'hybrid' else 1)]
+        seeds=evidence[:settings.retrieval_cap]
         started=perf_counter()
         evidence=await asyncio.to_thread(store.expand_context,body,seeds,settings.context_neighbors)
-        trace.steps.append(TraceStep(name='Section context',status='completed',detail=f'All {len(seeds)} seeds first; add up to {settings.context_neighbors} preceding/following chunks from the same node, within explicit filters. Source order retained.',duration_ms=round((perf_counter()-started)*1000,2),result_count=len(evidence),result_ids=[c.id for c in evidence]))
+        trace.steps.append(TraceStep(name='Section context',status='completed',detail=f'Top {len(seeds)} unique ranked seeds; configured retrieval cap {settings.retrieval_cap}. Add up to {settings.context_neighbors} preceding/following chunks from the same node, within explicit filters. Source order retained.',duration_ms=round((perf_counter()-started)*1000,2),result_count=len(evidence),result_ids=[c.id for c in evidence]))
+        started=perf_counter()
+        evidence,assembly=await asyncio.to_thread(store.assemble_context,evidence)
+        trace.steps.append(TraceStep(name='Context assembly',status='completed',detail=f"Join verified adjacent passages in source order; {assembly['joins']} joins, {assembly['duplicates_removed']} identical passages removed, {assembly['overlap_tokens_removed']} exact overlapping words removed. Preserve source locations; do not bridge missing passages or sections. Oversized joins fall back to complete original chunks.",duration_ms=round((perf_counter()-started)*1000,2),result_count=len(evidence),result_ids=[c.id for c in evidence]))
         packing=TraceStep(name='Evidence packing',status='completed',detail='Count selected model tokens; preserve complete passages.')
         trace.steps.append(packing)
         generation=TraceStep(name='Answer generation',status='completed',detail=f'{settings.llm_provider}: {settings.llm_model}; complete passages within token budget; Pydantic JSON/citation validation; at most one repair retry.')
@@ -178,7 +177,7 @@ def create_app(settings: Settings | None = None):
             raise
         finally:
             generation.duration_ms=round((perf_counter()-started)*1000,2)
-        chunks={item.id:item for item in evidence}
+        chunks={item.id:item for chunk in evidence for item in [chunk,*chunk._parts]}
         return ChatResponse(answer=answer.answer,citations=[chunks[id] for id in answer.citation_ids],insufficient_evidence=answer.insufficient_evidence,coverage_note=note,trace=trace)
 
     @app.get('/api/map',response_model=MapPage)

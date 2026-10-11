@@ -91,15 +91,23 @@ def pack_evidence(settings: Settings, request: SearchRequest, evidence: list[Chu
     if tokens([]) > budget:
         raise ModelOutputError("The question does not fit the configured model context. Shorten it or configure a verified larger context.")
     context=[]; skipped=[]; seen=set()
-    for chunk in evidence:
+    def include(chunk):
         if chunk.id in seen:
-            continue
+            return
         seen.add(chunk.id)
         item={"id":chunk.id,"title":chunk.title,"path":chunk.path,"coverage_note":chunk.coverage_note,"text":chunk.text}
+        if chunk.source_refs:
+            # Citation IDs refer to this assembled evidence item. Original IDs
+            # stay in backend provenance, not as confusing alternative IDs here.
+            item['source_locations']=[{'locator':ref.locator,**(
+                {'title':ref.title,'path':ref.path} if ref.node_id!=chunk.node_id else {})}
+                for ref in chunk.source_refs]
         if tokens(context + [item]) <= budget:
             context.append(item)
         else:
             skipped.append(chunk.id)
+            for part in chunk._parts: include(part)
+    for chunk in evidence: include(chunk)
     if not context:
         raise ModelOutputError("No complete passage fits the configured model context. Review chunking/context settings; Sources only remains available.")
     schema, messages = build(context)
@@ -121,7 +129,7 @@ async def generate_answer(settings: Settings, request: SearchRequest, evidence: 
     finally:
         if packing_trace:
             packing_trace.duration_ms=round((perf_counter()-started)*1000,2)
-    actual_evidence=[chunk for chunk in evidence if chunk.id in included]
+    actual_evidence=[item for chunk in evidence for item in [chunk,*chunk._parts] if item.id in included]
     if packing_trace:
         packing_trace.result_ids=[item["id"] for item in json.loads(messages[1]["content"])["evidence"]]
         packing_trace.result_count=len(packing_trace.result_ids)
