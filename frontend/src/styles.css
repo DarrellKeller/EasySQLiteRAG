@@ -220,34 +220,165 @@ body.disconnected #chat-page {
   border: 1px solid var(--border);
   border-radius: 18px;
   background: #fff;
-  padding: 12px;
-  box-shadow: 0 10px 30px #163f3b08;
+  padding: 16px;
+  box-shadow: 0 8px 28px #163f3b09;
+}
+.composer:focus-within {
+  border-color: var(--primary);
 }
 .composer textarea {
   display: block;
-  resize: vertical;
-  max-height: 200px;
-  min-height: 68px;
+  resize: none;
+  max-height: 180px;
+  min-height: 52px;
   width: 100%;
   border: 0;
   background: transparent;
-  padding: 8px;
+  padding: 6px 4px 14px;
   line-height: 1.5;
+  font-size: 16px;
+  outline: none;
 }
 .composer textarea::placeholder {
   color: var(--muted);
 }
 .composer-actions {
   display: flex;
-  gap: 8px;
+  gap: 14px;
   align-items: center;
 }
-.composer-actions select {
-  margin-right: auto;
-  font-size: 13px;
+.search-modes {
+  display: flex;
+  margin: 0 auto 0 0;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: #f4f6f4;
+  min-width: 0;
+}
+.search-modes label {
+  position: relative;
+  cursor: pointer;
+}
+.search-modes input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+.search-modes span {
+  display: block;
+  padding: 9px 13px;
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.search-modes input:checked + span {
+  background: var(--primary);
+  color: #fff;
+}
+.search-modes input:focus-visible + span {
+  outline: 2px solid var(--secondary);
+  outline-offset: 3px;
+}
+.sources-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.sources-toggle input {
+  accent-color: var(--primary);
+  width: 15px;
+  height: 15px;
 }
 .composer-actions button {
   font-size: 13px;
+}
+#send {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: 11px;
+  padding: 9px 15px;
+  font-weight: 600;
+}
+#send span[aria-hidden] {
+  font-size: 20px;
+  line-height: 1;
+}
+.composer-hint {
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+  margin: 10px 0 0;
+}
+.search-trace {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.search-trace summary {
+  cursor: pointer;
+  width: fit-content;
+  padding: 4px 0;
+}
+.trace-body {
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fafbf9;
+  overflow-wrap: anywhere;
+}
+.trace-body p,
+.message .trace-body p {
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 4px 0;
+}
+.trace-body ol {
+  padding-left: 18px;
+  margin-bottom: 0;
+}
+.trace-step {
+  margin: 12px 0;
+}
+.trace-step strong {
+  color: var(--ink);
+  display: block;
+}
+.trace-step.failed strong {
+  color: #8c3c29;
+}
+.trace-meta {
+  font-variant-numeric: tabular-nums;
+}
+.trace-ids {
+  margin-top: 4px;
+}
+#map-trace {
+  pointer-events: auto;
+  margin-left: auto;
+}
+#map-trace .search-trace {
+  margin: 0;
+}
+#map-trace .trace-body {
+  position: absolute;
+  right: 0;
+  bottom: 38px;
+  width: min(440px, calc(100vw - 44px));
+  max-height: 55dvh;
+  overflow: auto;
+  background: #fff;
+  box-shadow: 0 10px 30px #163f3b15;
 }
 #map-page {
   height: calc(100dvh - 80px);
@@ -589,12 +720,23 @@ dialog::backdrop {
     padding: 14px;
   }
   .composer-actions {
-    gap: 6px;
+    gap: 10px;
+    flex-wrap: wrap;
   }
-  .composer-actions button,
-  .composer-actions select {
-    font-size: 12px;
-    padding: 8px;
+  .search-modes {
+    width: 100%;
+    margin: 0;
+  }
+  .search-modes label {
+    flex: 1;
+    text-align: center;
+  }
+  #send,
+  #stop {
+    margin-left: auto;
+  }
+  .composer {
+    padding: 12px;
   }
   .source-actions {
     gap: 12px;

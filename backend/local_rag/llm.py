@@ -71,7 +71,7 @@ async def generate_answer(settings: Settings, request: SearchRequest, evidence: 
     included = {item["id"] for item in context}
     actual_evidence = [chunk for chunk in evidence if chunk.id in included]
     if not actual_evidence:
-        raise ModelOutputError("No evidence fits the configured model context. Use Find sources or ask your coding agent to adjust chunking.")
+        raise ModelOutputError("No evidence fits the configured model context. Enable Sources only or ask your coding agent to adjust chunking.")
     payload["messages"] = messages(context)
     # History informs retrieval in the app; it never replaces current evidence.
     for attempt in range(2):
@@ -84,7 +84,7 @@ async def generate_answer(settings: Settings, request: SearchRequest, evidence: 
             return validate_answer(content, actual_evidence)
         except (ValidationError, ValueError, KeyError, TypeError):
             if attempt:
-                raise ModelOutputError("The answer model returned invalid JSON or citations after one retry. Try Find sources.") from None
+                raise ModelOutputError("The answer model returned invalid JSON or citations after one retry. Try Sources only.") from None
         except httpx.HTTPError:
-            raise ModelOutputError("The answer model is unavailable. Start Ollama and check the configured model, or use Find sources.") from None
+            raise ModelOutputError("The answer model is unavailable. Start Ollama and check the configured model, or enable Sources only.") from None
     raise ModelOutputError("No valid answer was returned.")

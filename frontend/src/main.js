@@ -69,12 +69,15 @@ function safeUrl(value) {
 async function json(url, options = {}) {
   const response = await fetch(url, options);
   if (!response.ok) {
-    let detail;
+    let detail, trace;
     try {
       const data = await response.json();
       detail = typeof data.error === "string" && data.error;
+      trace = data.trace;
     } catch {}
-    throw new Error(detail || `Request failed (${response.status}).`);
+    const error = new Error(detail || `Request failed (${response.status}).`);
+    error.trace = trace;
+    throw error;
   }
   return response.json();
 }
@@ -99,19 +102,25 @@ function applyTheme(config) {
   document.documentElement.style.setProperty("--primary", palette[0]);
   document.documentElement.style.setProperty("--secondary", palette[1]);
 }
+const searchMode = () =>
+  document.querySelector('input[name="mode"]:checked').value;
 function requestBody(query) {
   return {
     query,
     scope_node_id: state.scope,
     group_ids: [...state.selectedGroups],
-    mode: $("mode").value,
+    mode: searchMode(),
     history: state.history.slice(-8),
   };
 }
 function setBusy(busy) {
   state.busy = busy;
-  $("send").disabled = $("find-sources").disabled =
-    busy || !state.config || state.config.total_chunks === 0;
+  $("send").disabled =
+    busy ||
+    !state.config ||
+    state.config.total_chunks === 0 ||
+    !$("question").value.trim();
+  $("send").hidden = busy;
   $("stop").hidden = !busy;
 }
 function scopeLabel() {
@@ -139,7 +148,55 @@ function changeScope(id, clearGroups = false) {
   status();
   loadMap();
 }
-function message(role, text, citations, note) {
+function traceView(trace) {
+  if (!trace || !Array.isArray(trace.steps)) return null;
+  const details = el("details", "search-trace");
+  details.append(el("summary", "", "Search trace"));
+  const body = el("div", "trace-body");
+  body.append(el("p", "trace-query", `Query: ${trace.query}`));
+  body.append(
+    el(
+      "p",
+      "",
+      `${trace.mode} · branch: ${trace.scope_node_id || "all"} · groups: ${(trace.group_ids || []).join(", ") || "all"}`,
+    ),
+  );
+  body.append(
+    el(
+      "p",
+      "",
+      trace.expansions?.length
+        ? `Expanded terms: ${trace.expansions.join(", ")}`
+        : "Original query only; no expansion.",
+    ),
+  );
+  const list = el("ol");
+  trace.steps.forEach((step) => {
+    const row = el("li", `trace-step ${step.status}`);
+    row.append(el("strong", "", `${step.name} · ${step.status}`));
+    row.append(
+      el(
+        "span",
+        "trace-meta",
+        `${Number(step.duration_ms || 0).toFixed(2)} ms${Number.isInteger(step.result_count) ? ` · ${step.result_count} results` : ""}`,
+      ),
+    );
+    row.append(el("p", "", step.detail));
+    if (step.result_ids?.length) {
+      const ids = el("details", "trace-ids");
+      ids.append(
+        el("summary", "", "Ranked passage IDs"),
+        el("p", "", step.result_ids.join(" → ")),
+      );
+      row.append(ids);
+    }
+    list.append(row);
+  });
+  body.append(list);
+  details.append(body);
+  return details;
+}
+function message(role, text, citations, note, trace) {
   const article = el("article", `message ${role}`);
   article.append(el("p", "", text));
   if (note) article.append(el("small", "scope-note", note));
@@ -152,12 +209,15 @@ function message(role, text, citations, note) {
     );
     article.append(links);
   }
+  const inspection = traceView(trace);
+  if (inspection) article.append(inspection);
   $("messages").append(article);
   $("messages").scrollTop = $("messages").scrollHeight;
 }
-async function ask(searchOnly = false) {
+async function ask(searchOnly = $("sources-only").checked) {
   const query = $("question").value.trim();
-  if (!query || state.busy || !state.config) return;
+  if (!query || state.busy || !state.config || state.config.total_chunks === 0)
+    return;
   const epoch = ++state.chatEpoch,
     body = requestBody(query),
     label = scopeLabel();
@@ -166,6 +226,7 @@ async function ask(searchOnly = false) {
   status(searchOnly ? "Finding sources…" : "Finding evidence…");
   message("user", query, [], label);
   $("question").value = "";
+  resizeQuestion();
   try {
     const data = await json(searchOnly ? "/api/search" : "/api/chat", {
       method: "POST",
@@ -183,6 +244,7 @@ async function ask(searchOnly = false) {
           : "No matching sources found.",
         results,
         data.coverage_note,
+        data.trace,
       );
     } else {
       if (typeof data.answer !== "string")
@@ -192,6 +254,7 @@ async function ask(searchOnly = false) {
         data.answer,
         data.citations || [],
         data.coverage_note,
+        data.trace,
       );
       state.history.push(
         { role: "user", content: query },
@@ -201,8 +264,11 @@ async function ask(searchOnly = false) {
     status();
     await refreshIssues();
   } catch (error) {
-    if (epoch === state.chatEpoch && error.name !== "AbortError")
+    if (epoch === state.chatEpoch && error.name !== "AbortError") {
       status(error.message);
+      if (error.trace)
+        message("assistant", error.message, [], null, error.trace);
+    }
   } finally {
     if (epoch === state.chatEpoch) setBusy(false);
   }
@@ -618,18 +684,25 @@ async function loadMap(more = false) {
   const epoch = ++state.mapEpoch;
   state.mapController?.abort();
   state.mapController = new AbortController();
-  const params = new URLSearchParams({ limit: "5000", mode: $("mode").value });
+  const params = new URLSearchParams({ limit: "5000", mode: searchMode() });
   if (state.scope) params.set("scope_node_id", state.scope);
   if (state.query) params.set("query", state.query);
   state.selectedGroups.forEach((id) => params.append("group_ids", id));
   if (more) params.set("cursor", state.cursor);
   $("more-points").disabled = true;
   $("map-count").textContent = "Loading…";
+  $("map-trace").hidden = true;
+  $("map-trace").replaceChildren();
   try {
     const data = await json(`/api/map?${params}`, {
       signal: state.mapController.signal,
     });
     if (epoch !== state.mapEpoch) return;
+    const inspection = traceView(data.trace);
+    if (inspection) {
+      $("map-trace").replaceChildren(inspection);
+      $("map-trace").hidden = false;
+    }
     if (
       !Array.isArray(data.points) ||
       data.points.some(
@@ -667,6 +740,11 @@ async function loadMap(more = false) {
       renderPointList();
     }
     $("map-count").textContent = error.message;
+    const inspection = traceView(error.trace);
+    if (inspection) {
+      $("map-trace").replaceChildren(inspection);
+      $("map-trace").hidden = false;
+    }
     $("map-empty").hidden = !!state.points.length;
     $("map-empty").textContent = "Map unavailable.";
   } finally {
@@ -790,12 +868,31 @@ $("chat-form").addEventListener("submit", (event) => {
   ask();
 });
 $("question").addEventListener("keydown", (event) => {
-  if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+  if (
+    event.key === "Enter" &&
+    !event.shiftKey &&
+    !event.isComposing &&
+    event.keyCode !== 229
+  ) {
     event.preventDefault();
     ask();
   }
 });
-$("find-sources").addEventListener("click", () => ask(true));
+function resizeQuestion() {
+  $("question").style.height = "auto";
+  $("question").style.height = `${Math.min($("question").scrollHeight, 180)}px`;
+}
+$("question").addEventListener("input", () => {
+  resizeQuestion();
+  setBusy(state.busy);
+});
+$("sources-only").addEventListener("change", () => {
+  const action = $("sources-only").checked ? "search" : "ask";
+  $("send-label").textContent = action === "ask" ? "Ask" : "Search";
+  $("composer-hint").textContent = $("sources-only").checked
+    ? "Matching passages only, no AI answer · Enter to search"
+    : "Enter to ask · Shift+Enter for a new line";
+});
 $("stop").addEventListener("click", () => {
   state.chatEpoch++;
   state.controller?.abort();
@@ -836,7 +933,7 @@ $("map-search").addEventListener("search", () => {
     loadMap();
   }
 });
-$("mode").addEventListener("change", () => {
+$("modes").addEventListener("change", () => {
   if (state.query) loadMap();
 });
 $("zoom-in").addEventListener("click", () => zoom(1.6));

@@ -51,16 +51,36 @@ class ModelAnswer(StrictModel):
     insufficient_evidence: bool
 
 
+class TraceStep(StrictModel):
+    name: str
+    status: Literal['completed', 'skipped', 'failed']
+    detail: str
+    duration_ms: float = Field(default=0.0, ge=0)
+    result_count: int | None = None
+    result_ids: list[str] = Field(default_factory=list)
+
+
+class SearchTrace(StrictModel):
+    query: str
+    mode: str
+    scope_node_id: str | None = None
+    group_ids: list[str] = Field(default_factory=list)
+    expansions: list[str] = Field(default_factory=list)
+    steps: list[TraceStep] = Field(default_factory=list)
+
+
 class ChatResponse(StrictModel):
     answer: str
     citations: list[Chunk]
     insufficient_evidence: bool
     coverage_note: str | None = None
+    trace: SearchTrace | None = None
 
 
 class SearchResponse(StrictModel):
     results: list[Chunk]
     coverage_note: str | None = None
+    trace: SearchTrace | None = None
 
 
 class Theme(StrictModel):
@@ -105,6 +125,7 @@ class MapPage(StrictModel):
     total_points: int
     next_cursor: str | None = None
     coverage_note: str | None = None
+    trace: SearchTrace | None = None
 
 
 class Issue(StrictModel):

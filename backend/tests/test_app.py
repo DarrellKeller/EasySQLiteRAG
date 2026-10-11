@@ -110,3 +110,58 @@ def test_hybrid_merges_independent_scoped_pools_without_duplicates(app):
         assert response.status_code==200
         ids=[item['id'] for item in response.json()['results']]
         assert set(ids)=={'z','semantic-only'} and len(ids)==2
+
+
+def test_trace_reports_actual_keyword_query_filters_and_no_model_call(app):
+    with TestClient(app) as client:
+        seed(app.state.store)
+        app.state.embedder.encode=lambda query: pytest.fail('Keyword search must not embed')
+        response=client.post('/api/search',json={'query':'"keyword evidence"','mode':'keyword','scope_node_id':'inside','group_ids':['g']})
+        trace=response.json()['trace']
+        assert trace['query']=='"keyword evidence"' and trace['expansions']==[]
+        assert trace['scope_node_id']=='inside' and trace['group_ids']==['g']
+        steps={step['name']:step for step in trace['steps']}
+        assert steps['Filters']['result_count']==1
+        assert 'MATCH: "keyword evidence"' in steps['Keyword search']['detail']
+        assert steps['Keyword search']['result_ids']==['z']
+        assert steps['Vector search']['status']=='skipped'
+        assert steps['Answer generation']['status']=='skipped'
+        assert all(step['duration_ms']>=0 for step in trace['steps'])
+
+
+def test_trace_scored_vectors_and_map_search(app):
+    with TestClient(app) as client:
+        seed(app.state.store)
+        app.state.embedder.encode=lambda query: np.array([1,0],dtype=np.float32)
+        response=client.get('/api/map?query=keyword&scope_node_id=inside')
+        trace=response.json()['trace']
+        steps={step['name']:step for step in trace['steps']}
+        assert 'Scored 1 vectors of 2 dimensions' in steps['Vector search']['detail']
+        assert steps['Result merge']['result_ids']==['z']
+        assert steps['Map']['result_ids']==['z']
+        assert client.get('/api/map').json()['trace'] is None
+
+
+def test_partial_trace_survives_embedding_and_generation_errors(app,monkeypatch):
+    from local_rag.llm import ModelOutputError
+    with TestClient(app) as client:
+        seed(app.state.store)
+        def unavailable(query): raise ValueError('Embedding unavailable')
+        app.state.embedder.encode=unavailable
+        response=client.post('/api/search',json={'query':'keyword','scope_node_id':'inside'})
+        assert response.status_code==400
+        assert response.json()['trace']['steps'][-1]['status']=='failed'
+        assert response.json()['trace']['steps'][1]['result_ids']==['z']
+        async def failed_generation(*args): raise ModelOutputError('Ollama unavailable')
+        monkeypatch.setattr('local_rag.app.generate_answer',failed_generation)
+        response=client.post('/api/chat',json={'query':'keyword','mode':'keyword','scope_node_id':'inside'})
+        assert response.status_code==502
+        assert response.json()['trace']['steps'][-1]['name']=='Answer generation'
+        assert response.json()['trace']['steps'][-1]['status']=='failed'
+
+
+def test_empty_trace_does_not_claim_search_or_inference_ran(app):
+    with TestClient(app) as client:
+        trace=client.post('/api/chat',json={'query':'Anything'}).json()['trace']
+        assert [step['status'] for step in trace['steps']]==['completed','skipped','skipped']
+        assert trace['steps'][0]['result_count']==0

@@ -122,10 +122,14 @@ class Store:
             where, params = self.scope(db, node_id, [])
             return [self.chunk(row) for row in db.execute("SELECT c.* FROM chunks c WHERE "+where+" ORDER BY c.id LIMIT ?", [*params,limit])]
 
-    def lexical(self, request, limit=80):
+    @staticmethod
+    def match_expression(query):
         # Escape tokens/quoted phrases; never execute user-provided FTS syntax.
-        terms = [a or b for a,b in re.findall(r'"([^\"]+)"|(\w+(?:[-.]\w+)*)', request.query)]
-        match = ' OR '.join('"'+term.replace('"','""')+'"' for term in terms[:40])
+        terms = [a or b for a,b in re.findall(r'"([^\"]+)"|(\w+(?:[-.]\w+)*)', query)]
+        return ' OR '.join('"'+term.replace('"','""')+'"' for term in terms[:40])
+
+    def lexical(self, request, limit=80):
+        match = self.match_expression(request.query)
         with self.connection() as db:
             where, params = self.scope(db, request.scope_node_id, request.group_ids)
             if not match:
@@ -138,7 +142,7 @@ class Store:
             where, params = self.scope(db, request.scope_node_id, request.group_ids)
             return db.execute("SELECT count(*) FROM chunks c WHERE "+where,params).fetchone()[0]
 
-    def exact(self, request, vector, model, config_id, limit=80):
+    def exact(self, request, vector, model, config_id, limit=80, metrics=None):
         query = np.asarray(vector, dtype=np.float32).reshape(-1)
         norm = np.linalg.norm(query)
         if not np.isfinite(query).all() or not np.isfinite(norm) or norm == 0:
@@ -165,6 +169,8 @@ class Store:
                     elif item>best[0]: heapq.heapreplace(best,item)
             if not count:
                 raise ValueError("No compatible document embeddings are indexed. Use Keyword mode or ask your coding agent to finish indexing.")
+        if metrics is not None:
+            metrics.update(scored_vectors=count, dimensions=len(query))
         return [self.get_chunk(chunk_id) for _,chunk_id in sorted(best,reverse=True)]
 
     def map_page(self, request, cursor, limit, config_id, model, search_ids=None):
