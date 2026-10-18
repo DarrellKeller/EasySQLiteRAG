@@ -19,7 +19,7 @@ class Settings(BaseModel):
     llm_tokenizer_revision: str = "main"
     context_reserve_tokens: int = Field(default=512, ge=128, le=8192)
     embedding_max_tokens: int = Field(default=512, ge=1)
-    retrieval_cap: int = Field(default=5, ge=1, le=80)
+    retrieval_cap: int = Field(default=3, ge=1, le=80)
     context_neighbors: int = Field(default=0, ge=0, le=3)
     context_tokens: int = Field(default=8192, ge=2048, le=131072)
     output_tokens: int = Field(default=768, ge=128, le=4096)
@@ -45,7 +45,7 @@ class Settings(BaseModel):
             llm_tokenizer_revision=os.getenv("LLM_TOKENIZER_REVISION", "main"),
             context_reserve_tokens=os.getenv("LLM_CONTEXT_RESERVE_TOKENS", "512"),
             embedding_max_tokens=os.getenv("EMBEDDING_MAX_TOKENS", "512"),
-            retrieval_cap=os.getenv("RETRIEVAL_CAP", "5"),
+            retrieval_cap=os.getenv("RETRIEVAL_CAP", "3"),
             context_neighbors=os.getenv("CONTEXT_NEIGHBORS", "0"),
             context_tokens=os.getenv("LLM_CONTEXT_TOKENS", "8192"),
             output_tokens=os.getenv("LLM_MAX_OUTPUT_TOKENS", "768"),

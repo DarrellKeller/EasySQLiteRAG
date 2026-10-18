@@ -8,13 +8,13 @@ Read before choosing chunk sizes or configuring a different model. Embedding lim
 |---|---|
 | Embeddings | `minishlab/potion-base-2M`, Model2Vec; static pooled 64-dimensional vectors |
 | `EMBEDDING_MAX_TOKENS` | `512`, explicit configurable encoder cap for both queries and document inputs |
-| Answer model | Ollama `granite4.2:3b`; keep this lightweight default unless the user chooses otherwise |
+| Answer model | Ollama `granite4.2:3b`; keep this Featherweight default unless the user chooses otherwise |
 | `LLM_TOKENIZER_MODEL` | `ibm-granite/granite-4.2-3b`; official fast tokenizer and chat template |
 | `LLM_TOKENIZER_REVISION` | `main`; resolve and record the downloaded revision for reproducibility, or pin a verified revision |
 | `LLM_CONTEXT_TOKENS` | `8192`, intentionally below Granite’s published 131,072-token architectural maximum |
 | `LLM_MAX_OUTPUT_TOKENS` | `768`, reserved for compact JSON answers with thinking disabled |
 | `LLM_CONTEXT_RESERVE_TOKENS` | `512`, additional token allowance for provider/template variation; repair is also counted explicitly |
-| `RETRIEVAL_CAP` | `5` unique ranked seed passages for Granite 3B; ask for the user's preference; starting heuristic is total model billions of parameters + 2, rounded up |
+| `RETRIEVAL_CAP` | `3` for Featherweight / Granite 3B; recommend `5` for Lightweight, `10` for Middleweight or `15` for Heavyweight, then obtain user approval; see [retrieval-settings.md](retrieval-settings.md) |
 | `CONTEXT_NEIGHBORS` | `0`, merge selected neighbors without automatically fetching extra context; enable a bounded amount only for demonstrated continuations/dependencies |
 
 These are starting settings, not universal optimal sizes or minimum hardware guarantees. Verify exact installed models, tokenizers and provider behavior.

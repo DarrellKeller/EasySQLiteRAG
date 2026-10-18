@@ -262,9 +262,9 @@ def test_chat_retrieval_cap_limits_seeds_before_context_packing(app,monkeypatch)
             return ModelAnswer(answer='Fact zero [1].',citation_ids=['c0'],insufficient_evidence=False)
         monkeypatch.setattr('local_rag.app.generate_answer',generate)
         data=client.post('/api/chat',json={'query':'keyword','mode':'keyword'}).json()
-        assert [c.id for c in captured]==[f'c{i}' for i in range(5)]
+        assert [c.id for c in captured]==[f'c{i}' for i in range(3)]
         context=next(s for s in data['trace']['steps'] if s['name']=='Section context')
-        assert context['result_count']==5 and 'retrieval cap 5' in context['detail']
+        assert context['result_count']==3 and 'retrieval cap 3' in context['detail']
 
 
 def test_grounded_table_relations_retain_anchors_if_indexed_evidence_is_removed(app):
