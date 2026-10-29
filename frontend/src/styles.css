@@ -766,6 +766,7 @@ body.map-view #source-dialog {
   position: fixed;
   top: 98px;
   bottom: 18px;
+  height: calc(100dvh - 116px);
   max-height: none;
   width: min(480px, calc(100vw - 44px));
   margin: 0;
@@ -789,6 +790,7 @@ body.map-view #source-dialog {
   body.map-view #source-dialog {
     top: 136px;
     bottom: 14px;
+    height: calc(100dvh - 150px);
     width: calc(100vw - 28px);
     left: 14px;
     right: 14px;

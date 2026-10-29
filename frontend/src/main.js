@@ -9,6 +9,7 @@ const state = {
   childCursors: new Map(),
   expanded: new Set(),
   scope: null,
+  scopeTitle: null,
   groups: [],
   selectedGroups: new Set(),
   points: [],
@@ -20,6 +21,7 @@ const state = {
   selected: null,
   selectedSource: null,
   zoom: 1,
+  mapFitted: true,
   camera: { x: 0, y: 0 },
   bounds: { x: 0, y: 0, w: 1, h: 1 },
   busy: false,
@@ -124,7 +126,9 @@ function setBusy(busy) {
   $("stop").hidden = !busy;
 }
 function scopeLabel() {
-  const parts = [state.nodes.get(state.scope)?.title || "All sources"];
+  const parts = [state.scope
+    ? state.nodes.get(state.scope)?.title || state.scopeTitle || "Selected source"
+    : "All sources"];
   if (state.selectedGroups.size)
     parts.push(
       `${state.selectedGroups.size} group${state.selectedGroups.size === 1 ? "" : "s"}`,
@@ -137,7 +141,12 @@ function syncScope() {
   renderHierarchy();
   renderGroups();
 }
-function changeScope(id, clearGroups = false) {
+function changeScope(id, clearGroups = false, title = null) {
+  // A citation can select a deep branch before its ancestors are expanded.
+  // Preserve its real title without pretending the full hierarchy node is loaded.
+  state.scopeTitle = id
+    ? state.nodes.get(id)?.title || title || (id === state.scope ? state.scopeTitle : null)
+    : null;
   state.scope = id;
   if (clearGroups) state.selectedGroups.clear();
   state.history = [];
@@ -564,6 +573,7 @@ function fit() {
   } else state.bounds = { x: 0, y: 0, w: 1, h: 1 };
   state.camera = { x: state.bounds.x, y: state.bounds.y };
   state.zoom = 1;
+  state.mapFitted = true;
   draw();
 }
 let drawQueued = false;
@@ -581,8 +591,11 @@ function paint() {
   if (!m.w || !m.h) return;
   const dpr = devicePixelRatio || 1,
     ctx = canvas.getContext("2d");
-  canvas.width = Math.round(m.w * dpr);
-  canvas.height = Math.round(m.h * dpr);
+  const width = Math.round(m.w * dpr), height = Math.round(m.h * dpr);
+  // Reassigning either size clears/reallocates the bitmap, even if unchanged.
+  // Pan/zoom should repaint an existing canvas; resize only on a real size change.
+  if (canvas.width !== width) canvas.width = width;
+  if (canvas.height !== height) canvas.height = height;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, m.w, m.h);
@@ -641,6 +654,7 @@ function hit(x, y) {
 function zoom(factor, x, y) {
   const m = mapMetrics();
   if (!m.scale) return;
+  state.mapFitted = false;
   x ??= m.centerX;
   y ??= m.h / 2;
   const world = {
@@ -735,7 +749,7 @@ async function loadMap(more = false) {
     $("map-empty").textContent =
       data.coverage_note || "No mapped passages in this scope.";
     $("more-points").hidden = !state.cursor;
-    if (!more) fit();
+    if (!more || state.mapFitted) fit();
     else draw();
     renderPointList();
     renderGroups();
@@ -808,6 +822,7 @@ $("map").addEventListener("pointermove", (event) => {
     } else {
       const scale = mapMetrics().scale;
       if (scale) {
+        state.mapFitted = false;
         state.camera.x -= (event.clientX - gesture.x) / scale;
         state.camera.y -= (event.clientY - gesture.y) / scale;
       }
@@ -921,7 +936,8 @@ $("issues-button").addEventListener("click", () => {
 });
 $("source-scope").addEventListener("click", () => {
   if (state.selectedSource?.node_id) {
-    changeScope(state.selectedSource.node_id);
+    changeScope(state.selectedSource.node_id, false,
+      state.selectedSource.path?.at(-1) || state.selectedSource.title);
     $("source-dialog").close();
   }
 });
