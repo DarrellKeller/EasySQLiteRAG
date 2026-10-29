@@ -6,7 +6,7 @@ Use these recommendations during onboarding. A **context count** is the maximum 
 
 | Class | Open models: published total parameters | Proprietary models: provider positioning | Recommended context count |
 |---|---|---|---:|
-| **Featherweight** | Up to 4B; **Granite 3B is the default** | Never assigned | **3** |
+| **Featherweight** | Up to 4B; **LFM3 1.7B is the default** | Never assigned | **3** |
 | **Lightweight** | Over 4B through 14B | Budget / mini / nano tier | **5** |
 | **Middleweight** | Over 14B through 70B | Standard / balanced tier | **10** |
 | **Heavyweight** | Over 70B | Flagship / frontier tier | **15** |

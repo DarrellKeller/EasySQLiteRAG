@@ -1,6 +1,6 @@
 # Simple, structured model output
 
-Use Pydantic v2 models for API requests/responses and every model-produced JSON object. Share the same schema between the provider request and server-side validation. Keep prompts short for modest models such as Granite; do not ask for essays, hidden reasoning or SQL.
+Use Pydantic v2 models for API requests/responses and every model-produced JSON object. Share the same schema between the provider request and server-side validation. Keep prompts short for modest models such as LFM3; do not ask for essays, hidden reasoning or SQL.
 
 The supplied backend's answer contract is:
 
@@ -20,7 +20,7 @@ Instructions to the model:
 
 For local Ollama `/api/chat`, use `format: ModelAnswer.model_json_schema()`, `stream: false` and `options.temperature: 0`. Include the schema alongside the short prompt, and send the question and bounded actual evidence separately as data. Parse `message.content` using `ModelAnswer.model_validate_json()`. Do not merely ask for JSON, use a loose regex, strip arbitrary prose or trust the outer HTTP response as validation. [Ollama structured outputs](https://docs.ollama.com/capabilities/structured-outputs).
 
-For Granite, send `think: false` so the small output budget is available for the answer. Restrict the schema's citation-ID values to the actual evidence that fits the request, and distinguish those IDs from the displayed `[1]` markers. The supplied backend validates IDs first and can derive absent display markers from the validated list; existing incorrect markers remain errors. An abstention without reference markers drops unclaimed citations.
+For LFM3, send `think: false` and count the official chat template with `enable_thinking=False`. Keep the small output budget available for the answer. Verify a real response because thinking suppression can vary by runtime. Validate `message.content` without treating a separate thinking field as an answer. Restrict the schema's citation-ID values to the actual evidence that fits the request, and distinguish those IDs from the displayed `[1]` markers. The supplied backend validates IDs first and can derive absent display markers from the validated list; existing incorrect markers remain errors. An abstention without reference markers drops unclaimed citations.
 
 Reject unknown or duplicate citation IDs and numbered references inconsistent with the citation list. The backend assembles citation titles, passage text and source URLs from retrieved records, never from generated fields. A derived context citation covers a verified adjacent excerpt; retain its original locations in `source_refs`. Restrict citation IDs to the assembled items actually packed, or complete original parts admitted by an oversized-join fallback. A supported answer needs valid citations; an insufficient-evidence response may have none. Validate content grounding separately: schema correctness alone does not establish truth.
 
@@ -34,4 +34,4 @@ FastAPI request and `response_model` validation enforce the public API contract 
 
 Read [model-limits.md](model-limits.md). The backend uses the configured model tokenizer and chat template to pack complete evidence passages, with output and overhead reserves and a budgeted repair message. It includes schema/citation constraints in counting before sending. No `text[:N]`, byte/token equivalence or repeated halving. Oversized passages are skipped whole and their IDs appear in the optional trace. A skipped passage cannot be cited. If no complete evidence fits, return a clear setup/context error and retain Sources only.
 
-For other local/cloud providers, verify their tokenizer or documented counting endpoint, actual context and output limits and schema overhead. Adapt both counting and inference; changing `.env` alone is not a working provider integration. Never silently reuse Granite’s tokenizer for another model. Preserve the same complete-evidence and explicit-skipping behavior.
+For other local/cloud providers, verify their tokenizer or documented counting endpoint, actual context and output limits and schema overhead. Adapt both counting and inference; changing `.env` alone is not a working provider integration. Never silently reuse LFM3's tokenizer for another model. Preserve the same complete-evidence and explicit-skipping behavior.

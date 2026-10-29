@@ -13,9 +13,9 @@ class Settings(BaseModel):
     embedding_model: str = "minishlab/potion-base-2M"
     embedding_config_id: str = "potion-base-2M:cosine:v1"
     llm_provider: str = "ollama"
-    llm_model: str = "granite4.2:3b"
+    llm_model: str = "lfm3:1.7b"
     llm_base_url: str = "http://localhost:11434"
-    llm_tokenizer_model: str = "ibm-granite/granite-4.2-3b"
+    llm_tokenizer_model: str = "LiquidAI/LFM3-1.7B"
     llm_tokenizer_revision: str = "main"
     context_reserve_tokens: int = Field(default=512, ge=128, le=8192)
     embedding_max_tokens: int = Field(default=512, ge=1)
@@ -39,9 +39,9 @@ class Settings(BaseModel):
             embedding_model=os.getenv("EMBEDDING_MODEL", "minishlab/potion-base-2M"),
             embedding_config_id=os.getenv("EMBEDDING_CONFIG_ID", "potion-base-2M:cosine:v1"),
             llm_provider=os.getenv("LLM_PROVIDER", "ollama"),
-            llm_model=os.getenv("LLM_MODEL", "granite4.2:3b"),
+            llm_model=os.getenv("LLM_MODEL", "lfm3:1.7b"),
             llm_base_url=os.getenv("LLM_BASE_URL", "http://localhost:11434"),
-            llm_tokenizer_model=os.getenv("LLM_TOKENIZER_MODEL", "ibm-granite/granite-4.2-3b" if os.getenv("LLM_MODEL", "granite4.2:3b") == "granite4.2:3b" else ""),
+            llm_tokenizer_model=os.getenv("LLM_TOKENIZER_MODEL", "LiquidAI/LFM3-1.7B" if os.getenv("LLM_MODEL", "lfm3:1.7b") == "lfm3:1.7b" else ""),
             llm_tokenizer_revision=os.getenv("LLM_TOKENIZER_REVISION", "main"),
             context_reserve_tokens=os.getenv("LLM_CONTEXT_RESERVE_TOKENS", "512"),
             embedding_max_tokens=os.getenv("EMBEDDING_MAX_TOKENS", "512"),
